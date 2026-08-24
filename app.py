@@ -1,4 +1,8 @@
 from datetime import datetime
+import email.mime.multipart
+import email.mime.text
+import smtplib
+import ssl
 import pandas as pd
 import streamlit as st
 
@@ -8,86 +12,109 @@ st.set_page_config(
 
 st.title("📦 نظام حساب رسوم الحاويات الذكي")
 st.write(
-    "مرحباً بك! نظام حساب الرسوم وفق التعريفة المعتمدة (تخزين 15 د/يوم لكل حاوية"
-    " ، مناولة وحراسة 265 د لكل حاوية، تأمين البيان 0.003، وخدمات عامة 1 د لكل"
-    " طن)."
+    "نظام احتساب الرسوم وفق التعريفة المعتمدة (تخزين 15 د/يوم، مناولة وحراسة"
+    " 265 د، تأمين البيان 0.003، وخدمات عامة 1 د لكل طن)."
 )
 
-# القيم الموحدة للجميع (تظهر دائماً)
-st.markdown("### ⚙️ القيم المشتركة للشحنة")
-col_g1, col_g2, col_g3 = st.columns(3)
-with col_g1:
+st.markdown("---")
+
+# الخطوة الأولى: المعلومات الأساسية ورقم المرجع
+st.markdown("### 📝 الخطوة 1: المعلومات الأساسية ورقم المرجع")
+col_r1, col_r2 = st.columns(2)
+with col_r1:
+  ref_number = st.text_input(
+      "رقم المرجع (رقم الحاوية أو رقم البوليصة)", value="BOL-2026-001"
+  )
+with col_r2:
   shared_weight = st.number_input(
       "الوزن الإجمالي (طن)", min_value=0.0, value=25.0, step=1.0
   )
-with col_g2:
+
+col_r3, col_r4 = st.columns(2)
+with col_r3:
   shared_declaration = st.number_input(
       "قيمة البيان الجمركي (دينار)", min_value=0.0, value=10000.0, step=100.0
   )
-with col_g3:
+with col_r4:
   handling_guard_fee_per_container = st.number_input(
       "بدل مناولة وحراسة (للحاوية)", min_value=0.0, value=265.0, step=5.0
   )
 
 st.markdown("---")
 
-input_method = st.radio(
-    "**اختر طريقة الإدخال المناسبة لك:**",
-    ("📱 💻 إدخال يدوي عبر الشاشة", "📊 رفع ملف إكسل (Excel)"),
+# الخطوة الثانية: تحديد عدد الحاويات
+st.markdown("### 🔢 الخطوة 2: عدد الحاويات")
+num_containers = st.number_input(
+    "كم عدد الحاويات المراد حساب رسومها؟", min_value=1, max_value=20, value=1
 )
 
+st.markdown("---")
+
+# الخطوة الثالثة: تواريخ الاستلام والخروج لكل حاوية
+st.markdown("### 📅 الخطوة 3: تواريخ الحاويات (استلام وخروج)")
 containers_data = []
 
-if input_method == "📱 💻 إدخال يدوي عبر الشاشة":
-  num_containers = st.number_input(
-      "كم عدد الحاويات التي تريد حساب رسومها؟", min_value=1, max_value=20, value=1
-  )
+for i in range(int(num_containers)):
+  st.markdown(f"#### 🔹 تفاصيل الحاوية رقم {i+1}")
+  col1, col2 = st.columns(2)
 
-  st.markdown("### 📅 تواريخ الحاويات")
-  for i in range(num_containers):
-    st.markdown(f"#### 🔹 الحاوية رقم {i+1}")
-    col1, col2 = st.columns(2)
-
-    with col1:
-      r_date = st.date_input(
-          f"تاريخ الاستلام (حاوية {i+1})", key=f"r_{i}", value=datetime.today()
-      )
-
-    with col2:
-      e_date = st.date_input(
-          f"تاريخ الخروج (حاوية {i+1})", key=f"e_{i}", value=datetime.today()
-      )
-
-    containers_data.append({
-        "receipt_date": str(r_date),
-        "exit_date": str(e_date),
-    })
-    st.markdown("---")
-
-else:
-  uploaded_file = st.file_uploader(
-      "اختر ملف الإكسل (يجب أن يحتوي على أعمدة: receipt_date, exit_date)",
-      type=["xlsx", "xls"],
-  )
-
-  if uploaded_file is not None:
-    df = pd.read_excel(uploaded_file)
-    containers_data = df.to_dict(orient="records")
-    st.success(
-        f"تم بنجاح قراءة البيانات لعدد {len(containers_data)} حاوية من الملف."
+  with col1:
+    r_date = st.date_input(
+        f"تاريخ الاستلام (حاوية {i+1})", key=f"r_{i}", value=datetime.today()
     )
 
-if st.button("🧮 حساب الرسوم الإجمالية", type="primary"):
+  with col2:
+    e_date = st.date_input(
+        f"تاريخ الخروج (حاوية {i+1})", key=f"e_{i}", value=datetime.today()
+    )
+
+  containers_data.append({
+      "receipt_date": str(r_date),
+      "exit_date": str(e_date),
+  })
+  st.markdown("---")
+
+
+# وظيفة إرسال البريد الإلكتروني
+def send_email_report(report_text, ref_no):
+  try:
+    sender_email = st.secrets["email"]["sender_email"]
+    sender_password = st.secrets["email"]["sender_password"]
+  except Exception:
+    return (
+        False,
+        "لم يتم ضبط إعدادات البريد الإلكتروني في إعدادات المنصة (Secrets).",
+    )
+
+  receiver_email = "Amerbasuoni@yahoo.com"
+
+  message = email.mime.multipart.MIMEMultipart("alternative")
+  message["Subject"] = f"كشف حساب رسوم حاويات - رقم المرجع: {ref_no}"
+  message["From"] = sender_email
+  message["To"] = receiver_email
+
+  part = email.mime.text.MIMEText(report_text, "plain", "utf-8")
+  message.attach(part)
+
+  try:
+    context = ssl.create_default_context()
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
+      server.login(sender_email, sender_password)
+      server.sendmail(sender_email, receiver_email, message.as_string())
+    return True, "تم إرسال التقرير بنجاح إلى البريد الإلكتروني."
+  except Exception as e:
+    return False, f"فشل في إرسال البريد الإلكتروني: {e}"
+
+
+if st.button("🧮 حساب الرسوم وإرسال التقرير", type="primary"):
   if not containers_data:
-    st.warning("الرجاء إدخال تواريخ الحاويات أو رفع ملف إكسل أولاً.")
+    st.warning("الرجاء إدخال تواريخ الحاويات أولاً.")
   else:
     num_containers_count = len(containers_data)
 
-    # الرسوم الإجمالية الثابتة للبيان (بغض النظر عن عدد الحاويات)
     total_insurance = shared_declaration * 0.003
     total_general_services = shared_weight * 1.0
 
-    # حصة كل حاوية من الرسوم الثابتة لتوزيعها في الجدول
     insurance_share_per_container = total_insurance / num_containers_count
     general_services_share_per_container = (
         total_general_services / num_containers_count
@@ -95,6 +122,14 @@ if st.button("🧮 حساب الرسوم الإجمالية", type="primary"):
 
     grand_total = 0
     report_results = []
+    email_body_lines = [
+        "تقرير حساب رسوم الحاويات والساحات",
+        f"رقم المرجع (الحاوية/البوليصة): {ref_number}",
+        f"إجمالي الوزن: {shared_weight} طن",
+        f"قيمة البيان الجمركي: {shared_declaration} دينار",
+        f"عدد الحاويات: {num_containers_count}",
+        "-" * 30,
+    ]
 
     for index, container in enumerate(containers_data, start=1):
       d1 = pd.to_datetime(container["receipt_date"])
@@ -103,10 +138,9 @@ if st.button("🧮 حساب الرسوم الإجمالية", type="primary"):
       if storage_days < 0:
         storage_days = 0
 
-      storage_fee = storage_days * 15  # 15 دينار لكل يوم لكل حاوية
-      handling_guard_fee = handling_guard_fee_per_container  # 265 لكل حاوية
+      storage_fee = storage_days * 15
+      handling_guard_fee = handling_guard_fee_per_container
 
-      # مجموع رسوم هذه الحاوية
       container_total = (
           storage_fee
           + handling_guard_fee
@@ -125,12 +159,25 @@ if st.button("🧮 حساب الرسوم الإجمالية", type="primary"):
           "الإجمالي": f"{container_total:.2f} د",
       })
 
-    st.success("تم إتمام الحسابات بنجاح وفق التعريفة المعتمدة!")
+      email_body_lines.append(
+          f"الحاوية {index}: تخزين {storage_days} أيام ({storage_fee}د) |"
+          f" الإجمالي: {container_total:.2f} د"
+      )
 
-    # عرض ملخص إضافي للرسوم الثابتة
+    email_body_lines.append("-" * 30)
+    email_body_lines.append(f"الإجمالي الكلي للرسوم: {grand_total:.2f} دينار")
+    email_body_lines.append(
+        "\nملاحظة: هذا البرنامج لغاية الاحتساب وليس رسمياً."
+    )
+    email_body_lines.append("إعداد: السيد علي بسيوني")
+
+    full_email_text = "\n".join(email_body_lines)
+
+    st.success("تم إتمام الحسابات بنجاح!")
+
     st.info(
-        f"📌 **ملخص الرسوم الثابتة للشحنة:** تأمين البيان الكلي ="
-        f" {total_insurance:.2f} د | خدمات عامة الكلية ="
+        f"📌 **رقم المرجع:** {ref_number} | **تأمين البيان الكلي:**"
+        f" {total_insurance:.2f} د | **خدمات عامة الكلية:**"
         f" {total_general_services:.2f} د"
     )
 
@@ -139,6 +186,16 @@ if st.button("🧮 حساب الرسوم الإجمالية", type="primary"):
     st.markdown(
         f"### 💰 الإجمالي الكلي للرسوم: **{grand_total:.2f} دينار**"
     )
+
+    # إرسال الإيميل
+    email_success, email_msg = send_email_report(full_email_text, ref_number)
+    if email_success:
+      st.success(email_msg)
+    else:
+      st.warning(
+          f"{email_msg} (ملاحظة: لإرسال البريد فعلياً، تأكد من إعداد Secrets"
+          " في لوحة تحكم Streamlit)"
+      )
 
 # التوقيع والملاحظة الرسمية في الأسفل
 st.markdown("---")
