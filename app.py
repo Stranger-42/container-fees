@@ -8,8 +8,8 @@ st.set_page_config(
 
 st.title("📦 نظام حساب رسوم الحاويات الذكي")
 st.write(
-    "مرحباً بك! يمكنك الاختيار بين رفع ملف إكسل جاهز أو إدخال البيانات يدوياً"
-    " مباشرة من هاتفك أو حاسوبك."
+    "مرحباً بك! يمكنك إدخال تواريخ كل حاوية على حدة، بينما يتم تطبيق الوزن,"
+    " قيمة البيان، وبدل الحراسة بشكل موحد."
 )
 
 input_method = st.radio(
@@ -25,34 +25,44 @@ if input_method == "📱 💻 إدخال يدوي عبر الشاشة":
       "كم عدد الحاويات التي تريد حساب رسومها؟", min_value=1, max_value=20, value=1
   )
 
+  st.markdown("### ⚙️ القيم الموحدة لجميع الحاويات")
+  col_g1, col_g2, col_g3 = st.columns(3)
+  with col_g1:
+    shared_weight = st.number_input(
+        "الوزن الإجمالي (طن)", min_value=0.0, value=25.0
+    )
+  with col_g2:
+    shared_declaration = st.number_input(
+        "قيمة البيان الجمركي (دينار)", min_value=0.0, value=10000.0
+    )
+  with col_g3:
+    guard_unit_price = st.number_input(
+        "سعر بدل الحراسة (للحاوية)", min_value=0.0, value=250.0
+    )
+
+  st.markdown("---")
+  st.markdown("### 📅 تواريخ الحاويات")
+
   for i in range(num_containers):
-    st.markdown(f"### 🔹 الحاوية رقم {i+1}")
+    st.markdown(f"#### 🔹 الحاوية رقم {i+1}")
     col1, col2 = st.columns(2)
 
     with col1:
       r_date = st.date_input(
           f"تاريخ الاستلام (حاوية {i+1})", key=f"r_{i}", value=datetime.today()
       )
-      d_val = st.number_input(
-          f"قيمة البيان الجمركي (دينار)",
-          min_value=0.0,
-          value=10000.0,
-          key=f"v_{i}",
-      )
 
     with col2:
       e_date = st.date_input(
           f"تاريخ الخروج (حاوية {i+1})", key=f"e_{i}", value=datetime.today()
       )
-      t_weight = st.number_input(
-          f"الوزن الإجمالي (طن)", min_value=0.0, value=25.0, key=f"w_{i}"
-      )
 
     containers_data.append({
         "receipt_date": str(r_date),
         "exit_date": str(e_date),
-        "declaration_value": d_val,
-        "total_weight": t_weight,
+        "declaration_value": shared_declaration,
+        "total_weight": shared_weight,
+        "guard_unit_price": guard_unit_price,
     })
     st.markdown("---")
 
@@ -60,7 +70,7 @@ else:
   st.markdown("---")
   uploaded_file = st.file_uploader(
       "اختر ملف الإكسل (receipt_date, exit_date, declaration_value,"
-      " total_weight)",
+      " total_weight, guard_unit_price)",
       type=["xlsx", "xls"],
   )
 
@@ -77,6 +87,7 @@ if st.button("🧮 حساب الرسوم الإجمالية", type="primary"):
   else:
     grand_total = 0
     report_results = []
+    num_containers_count = len(containers_data)
 
     for index, container in enumerate(containers_data, start=1):
       d1 = pd.to_datetime(container["receipt_date"])
@@ -86,7 +97,10 @@ if st.button("🧮 حساب الرسوم الإجمالية", type="primary"):
         storage_days = 0
 
       storage_fee = storage_days * 15
-      guard_fee = 250
+      # بدل الحراسة = السعر * عدد الحاويات
+      unit_p = container.get("guard_unit_price", 250.0)
+      guard_fee = unit_p * num_containers_count
+
       declaration_fee = container["declaration_value"] * 0.003
       weight_fee = container["total_weight"] * 1
 
@@ -109,3 +123,13 @@ if st.button("🧮 حساب الرسوم الإجمالية", type="primary"):
     st.markdown(
         f"### 💰 الإجمالي الكلي للرسوم: **{grand_total:.2f} دينار**"
     )
+
+# التوقيع والملاحظة الرسمية في الأسفل
+st.markdown("---")
+st.markdown(
+    "<div style='text-align: center; color: #666; font-size: 13px;'>"
+    "<b>⚠️ ملاحظة:</b> هذا البرنامج لغاية الاحتساب وليس رسمياً<br>"
+    "تم إنشاء هذا البرنامج من خلال <b>السيد علي بسيوني</b>"
+    "</div>",
+    unsafe_allow_html=True,
+)
