@@ -10,10 +10,46 @@ st.set_page_config(
     page_title="نظام حساب رسوم الحاويات", page_icon="📦", layout="centered"
 )
 
+# تخصيص التصميم: الخطوط الكبيرة واللون الأزرق والتنسيق المحسن
+st.markdown(
+    """
+    <style>
+    /* تغيير لون الحجم لكل العناوين الرئيسية إلى أزرق داكن وواضح */
+    h1, h2, h3 {
+        color: #1e3a8a !important;
+        font-family: 'Tahoma', sans-serif;
+    }
+    
+    /* تنسيق صندوق النتيجة الكلية */
+    .total-box {
+        background-color: #eff6ff;
+        padding: 18px;
+        border-radius: 12px;
+        border: 2px solid #3b82f6;
+        text-align: center;
+        font-size: 22px !important;
+        color: #1e40af !important;
+        font-weight: bold;
+        margin-top: 15px;
+        margin-bottom: 15px;
+    }
+    
+    /* تنسيق النصوص العادية والتعليمات */
+    p, label, .stMarkdown {
+        font-size: 16px !important;
+        color: #334155;
+    }
+    </style>
+""",
+    unsafe_allow_html=True,
+)
+
 st.title("📦 نظام حساب رسوم الحاويات الذكي")
-st.write(
-    "نظام احتساب الرسوم وفق التعريفة المعتمدة (تخزين 15 د/يوم، مناولة وحراسة"
-    " 265 د، تأمين البيان 0.003، وخدمات عامة 1 د لكل طن)."
+st.markdown(
+    "<p style='color: #475569; font-size: 16px;'>نظام احتساب الرسوم وفق"
+    " التعريفة المعتمدة (تخزين 15 د/يوم، مناولة وحراسة 265 د، تأمين البيان"
+    " 0.003، وخدمات عامة 1 د لكل طن).</p>",
+    unsafe_allow_html=True,
 )
 
 st.markdown("---")
@@ -49,9 +85,9 @@ with col_r4:
       "بدل مناولة وحراسة (للحاوية)", min_value=0.0, value=265.0, step=5.0
   )
 
-# إضافة خانة إدخال البريد الإلكتروني الإضافي
+# خانة إدخال البريد الإلكتروني للإرسال
 recipient_email_input = st.text_input(
-    "إرسال نسخة من التقرير إلى بريد إلكتروني إضافي (اختياري)",
+    "البريد الإلكتروني المراد الإرسال إليه (اختياري)",
     value="",
     placeholder="example@domain.com",
 )
@@ -71,7 +107,10 @@ st.markdown("### 📅 الخطوة 3: تواريخ الحاويات (استلا�
 containers_data = []
 
 for i in range(int(num_containers)):
-  st.markdown(f"#### 🔹 تفاصيل الحاوية رقم {i+1}")
+  st.markdown(
+      f"<h4 style='color: #2563eb;'>🔹 تفاصيل الحاوية رقم {i+1}</h4>",
+      unsafe_allow_html=True,
+  )
   col1, col2 = st.columns(2)
 
   with col1:
@@ -202,28 +241,27 @@ if st.button("🧮 حساب الرسوم", type="primary"):
 
     result_df = pd.DataFrame(report_results)
     st.table(result_df)
+
+    # عرض الإجمالي الكلي بصندوق أزرق كبير وبارز
     st.markdown(
-        f"### 💰 الإجمالي الكلي للرسوم: **{grand_total:,.2f} دينار**"
+        f"""
+        <div class="total-box">
+            💰 الإجمالي الكلي للرسوم: {grand_total:,.2f} دينار
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
     st.session_state["last_report"] = full_email_text
     st.session_state["ref_number"] = ref_number
     st.session_state["extra_email"] = recipient_email_input
 
-    email_success, email_msg = send_email_reports(
-        full_email_text, ref_number, recipient_email_input
-    )
-    if email_success:
-      st.success(email_msg)
-    else:
-      st.warning(
-          f"{email_msg} (ملاحظة: لإرسال البريد الفعلي، يمكنك ضبط الإعدادات لاحقاً"
-          " في Secrets)."
-      )
-
 if "last_report" in st.session_state:
   st.markdown("---")
-  st.markdown("### 🖨️ 📧 خيارات الطباعة وإعادة الإرسال")
+  st.markdown(
+      "<h3 style='color: #1e3a8a;'>🖨️ 📧 خيارات التحميل، الإرسال، والطباعة</h3>",
+      unsafe_allow_html=True,
+  )
 
   col_p1, col_p2, col_p3 = st.columns(3)
   with col_p1:
@@ -234,7 +272,7 @@ if "last_report" in st.session_state:
         mime="text/plain;charset=utf-8",
     )
   with col_p2:
-    if st.button("📤 إعادة إرسال بالبريد"):
+    if st.button("📤 إرسال عبر البريد"):
       s_succ, s_msg = send_email_reports(
           st.session_state["last_report"],
           st.session_state["ref_number"],
@@ -247,7 +285,7 @@ if "last_report" in st.session_state:
   with col_p3:
     st.markdown(
         """
-        <button onclick="window.print()" style="width: 100%; background-color: #2563eb; color: white; padding: 10px 10px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; font-family: Tahoma; font-size: 14px;">
+        <button onclick="window.print()" style="width: 100%; background-color: #2563eb; color: white; padding: 11px 10px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-family: Tahoma; font-size: 15px;">
             🖨️ طباعة الفاتورة
         </button>
         """,
@@ -256,7 +294,7 @@ if "last_report" in st.session_state:
 
 st.markdown("---")
 st.markdown(
-    "<div style='text-align: center; color: #666; font-size: 13px;'>"
+    "<div style='text-align: center; color: #64748b; font-size: 14px;'>"
     "<b>⚠️ ملاحظة:</b> هذا البرنامج لغاية الاحتساب وليس رسمياً<br>"
     "تم إنشاء هذا البرنامج من خلال <b>السيد علي بسيوني</b>"
     "</div>",
