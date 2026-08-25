@@ -41,7 +41,7 @@ with col_r3:
       min_value=0.0,
       value=None,
       step=100.0,
-      format="%,.2f",
+      format="%0.2f",
       placeholder="0.00",
   )
 with col_r4:
@@ -98,7 +98,6 @@ def send_email_reports(report_text, ref_no, extra_email):
   except Exception:
     return False, "إعدادات البريد غير متوفرة في Secrets."
 
-  # المستلمين الأساسي (السيستم) + البريد الإضافي إن وجد
   receivers = ["Amerbasuoni@yahoo.com"]
   if extra_email and "@" in extra_email:
     receivers.append(extra_email.strip())
@@ -125,7 +124,6 @@ def send_email_reports(report_text, ref_no, extra_email):
 
 
 if st.button("🧮 حساب الرسوم", type="primary"):
-  # التحقق من إدخال القيم الأساسية
   if shared_weight is None or shared_declaration is None:
     st.warning("الرجاء إدخال الوزن الإجمالي وقيمة البيان الجمركي أولاً.")
   elif not containers_data:
@@ -208,12 +206,10 @@ if st.button("🧮 حساب الرسوم", type="primary"):
         f"### 💰 الإجمالي الكلي للرسوم: **{grand_total:,.2f} دينار**"
     )
 
-    # حفظ التقرير في الذاكرة لتوفير زر الطباعة والإرسال اليدوي
     st.session_state["last_report"] = full_email_text
     st.session_state["ref_number"] = ref_number
     st.session_state["extra_email"] = recipient_email_input
 
-    # محاولة إرسال البريد تلقائياً
     email_success, email_msg = send_email_reports(
         full_email_text, ref_number, recipient_email_input
     )
@@ -225,7 +221,6 @@ if st.button("🧮 حساب الرسوم", type="primary"):
           " في Secrets)."
       )
 
-# خيارات الطباعة والإرسال الإضافي إذا توفر تقرير محسوب
 if "last_report" in st.session_state:
   st.markdown("---")
   st.markdown("### 🖨️ 📧 خيارات الطباعة وإعادة الإرسال")
@@ -259,7 +254,6 @@ if "last_report" in st.session_state:
         unsafe_allow_html=True,
     )
 
-# التوقيع والملاحظة الرسمية في الأسفل
 st.markdown("---")
 st.markdown(
     "<div style='text-align: center; color: #666; font-size: 13px;'>"
@@ -268,3 +262,4 @@ st.markdown(
     "</div>",
     unsafe_allow_html=True,
 )
+
