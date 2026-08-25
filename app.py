@@ -199,14 +199,17 @@ if st.button("🧮 حساب الرسوم", type="primary"):
     st.session_state["ref_number"] = ref_number
     st.session_state["extra_email"] = recipient_email_input
 
-    # إرسال البريد تلقائياً عند الحساب
+    # محاولة إرسال البريد تلقائياً (ستظهر ملاحظة الـ Secrets إذا لم تكن مفعلة، دون أن تعطل الحساب)
     email_success, email_msg = send_email_reports(
         full_email_text, ref_number, recipient_email_input
     )
     if email_success:
       st.success(email_msg)
     else:
-      st.warning(email_msg)
+      st.warning(
+          f"{email_msg} (ملاحظة: لإرسال البريد الفعلي، يمكنك ضبط الإعدادات لاحقاً"
+          " في Secrets)."
+      )
 
 # خيارات الطباعة والإرسال الإضافي إذا توفر تقرير محسوب
 if "last_report" in st.session_state:
@@ -217,9 +220,11 @@ if "last_report" in st.session_state:
   with col_p1:
     st.download_button(
         label="📥 تحميل التقرير (.txt)",
-        data=st.session_state["last_report"],
+        data=st.session_state["last_report"].encode(
+            "utf-8-sig"
+        ),  # لضمان ظهور العربية بشكل صحيح
         file_name=f"Container_Fees_{st.session_state['ref_number']}.txt",
-        mime="text/plain",
+        mime="text/plain;charset=utf-8",
     )
   with col_p2:
     if st.button("📤 إعادة إرسال بالبريد"):
