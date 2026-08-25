@@ -18,7 +18,7 @@ st.write(
 
 st.markdown("---")
 
-# الخطوة الأولى: المعلومات الأساسية ورقم المرجع
+# الخطوة الأولى: المعلومات الأساسية ورقم المرجع والبريد المستلم
 st.markdown("### 📝 الخطوة 1: المعلومات الأساسية ورقم المرجع")
 col_r1, col_r2 = st.columns(2)
 with col_r1:
@@ -39,6 +39,13 @@ with col_r4:
   handling_guard_fee_per_container = st.number_input(
       "بدل مناولة وحراسة (للحاوية)", min_value=0.0, value=265.0, step=5.0
   )
+
+# إضافة خانة إدخال البريد الإلكتروني الإضافي
+recipient_email_input = st.text_input(
+    "إرسال نسخة من التقرير إلى بريد إلكتروني إضافي (اختياري)",
+    value="",
+    placeholder="example@domain.com",
+)
 
 st.markdown("---")
 
@@ -75,43 +82,44 @@ for i in range(int(num_containers)):
   st.markdown("---")
 
 
-# وظيفة إرسال البريد الإلكتروني
-def send_email_report(report_text, ref_no):
+def send_email_reports(report_text, ref_no, extra_email):
   try:
     sender_email = st.secrets["email"]["sender_email"]
     sender_password = st.secrets["email"]["sender_password"]
   except Exception:
-    return (
-        False,
-        "لم يتم ضبط إعدادات البريد الإلكتروني في إعدادات المنصة (Secrets).",
-    )
+    return False, "إعدادات البريد غير متوفرة في Secrets."
 
-  receiver_email = "Amerbasuoni@yahoo.com"
+  # المستلمين الأساسي (السيستم) + البريد الإضافي إن وجد
+  receivers = ["Amerbasuoni@yahoo.com"]
+  if extra_email and "@" in extra_email:
+    receivers.append(extra_email.strip())
 
-  message = email.mime.multipart.MIMEMultipart("alternative")
-  message["Subject"] = f"كشف حساب رسوم حاويات - رقم المرجع: {ref_no}"
-  message["From"] = sender_email
-  message["To"] = receiver_email
-
-  part = email.mime.text.MIMEText(report_text, "plain", "utf-8")
-  message.attach(part)
-
+  success_count = 0
   try:
     context = ssl.create_default_context()
     with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
       server.login(sender_email, sender_password)
-      server.sendmail(sender_email, receiver_email, message.as_string())
-    return True, "تم إرسال التقرير بنجاح إلى البريد الإلكتروني."
+      for receiver in receivers:
+        message = email.mime.multipart.MIMEMultipart("alternative")
+        message["Subject"] = f"كشف حساب رسوم حاويات - رقم المرجع: {ref_no}"
+        message["From"] = sender_email
+        message["To"] = receiver
+
+        part = email.mime.text.MIMEText(report_text, "plain", "utf-8")
+        message.attach(part)
+
+        server.sendmail(sender_email, receiver, message.as_string())
+        success_count += 1
+    return True, f"تم إرسال التقرير بنجاح إلى ({success_count} بريد إلكتروني)."
   except Exception as e:
-    return False, f"فشل في إرسال البريد الإلكتروني: {e}"
+    return False, f"فشل في إرسال البريد: {e}"
 
 
-if st.button("🧮 حساب الرسوم وإرسال التقرير", type="primary"):
+if st.button("🧮 حساب الرسوم", type="primary"):
   if not containers_data:
     st.warning("الرجاء إدخال تواريخ الحاويات أولاً.")
   else:
     num_containers_count = len(containers_data)
-
     total_insurance = shared_declaration * 0.003
     total_general_services = shared_weight * 1.0
 
@@ -174,7 +182,6 @@ if st.button("🧮 حساب الرسوم وإرسال التقرير", type="pri
     full_email_text = "\n".join(email_body_lines)
 
     st.success("تم إتمام الحسابات بنجاح!")
-
     st.info(
         f"📌 **رقم المرجع:** {ref_number} | **تأمين البيان الكلي:**"
         f" {total_insurance:.2f} د | **خدمات عامة الكلية:**"
@@ -187,15 +194,53 @@ if st.button("🧮 حساب الرسوم وإرسال التقرير", type="pri
         f"### 💰 الإجمالي الكلي للرسوم: **{grand_total:.2f} دينار**"
     )
 
-    # إرسال الإيميل
-    email_success, email_msg = send_email_report(full_email_text, ref_number)
+    # حفظ التقرير في الذاكرة لتوفير زر الطباعة والإرسال اليدوي
+    st.session_state["last_report"] = full_email_text
+    st.session_state["ref_number"] = ref_number
+    st.session_state["extra_email"] = recipient_email_input
+
+    # إرسال البريد تلقائياً عند الحساب
+    email_success, email_msg = send_email_reports(
+        full_email_text, ref_number, recipient_email_input
+    )
     if email_success:
       st.success(email_msg)
     else:
-      st.warning(
-          f"{email_msg} (ملاحظة: لإرسال البريد فعلياً، تأكد من إعداد Secrets"
-          " في لوحة تحكم Streamlit)"
+      st.warning(email_msg)
+
+# خيارات الطباعة والإرسال الإضافي إذا توفر تقرير محسوب
+if "last_report" in st.session_state:
+  st.markdown("---")
+  st.markdown("### 🖨️ 📧 خيارات الطباعة وإعادة الإرسال")
+
+  col_p1, col_p2, col_p3 = st.columns(3)
+  with col_p1:
+    st.download_button(
+        label="📥 تحميل التقرير (.txt)",
+        data=st.session_state["last_report"],
+        file_name=f"Container_Fees_{st.session_state['ref_number']}.txt",
+        mime="text/plain",
+    )
+  with col_p2:
+    if st.button("📤 إعادة إرسال بالبريد"):
+      s_succ, s_msg = send_email_reports(
+          st.session_state["last_report"],
+          st.session_state["ref_number"],
+          st.session_state["extra_email"],
       )
+      if s_succ:
+        st.success(s_msg)
+      else:
+        st.error(s_msg)
+  with col_p3:
+    st.markdown(
+        """
+        <button onclick="window.print()" style="width: 100%; background-color: #2563eb; color: white; padding: 10px 10px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; font-family: Tahoma; font-size: 14px;">
+            🖨️ طباعة الفاتورة
+        </button>
+        """,
+        unsafe_allow_html=True,
+    )
 
 # التوقيع والملاحظة الرسمية في الأسفل
 st.markdown("---")
@@ -206,3 +251,4 @@ st.markdown(
     "</div>",
     unsafe_allow_html=True,
 )
+
