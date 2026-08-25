@@ -27,13 +27,22 @@ with col_r1:
   )
 with col_r2:
   shared_weight = st.number_input(
-      "الوزن الإجمالي (طن)", min_value=0.0, value=25.0, step=1.0
+      "الوزن الإجمالي (طن)",
+      min_value=0.0,
+      value=None,
+      step=1.0,
+      placeholder="أدخل الوزن الإجمالي...",
   )
 
 col_r3, col_r4 = st.columns(2)
 with col_r3:
   shared_declaration = st.number_input(
-      "قيمة البيان الجمركي (دينار)", min_value=0.0, value=10000.0, step=100.0
+      "قيمة البيان الجمركي (دينار)",
+      min_value=0.0,
+      value=None,
+      step=100.0,
+      format="%,.2f",
+      placeholder="0.00",
   )
 with col_r4:
   handling_guard_fee_per_container = st.number_input(
@@ -116,7 +125,10 @@ def send_email_reports(report_text, ref_no, extra_email):
 
 
 if st.button("🧮 حساب الرسوم", type="primary"):
-  if not containers_data:
+  # التحقق من إدخال القيم الأساسية
+  if shared_weight is None or shared_declaration is None:
+    st.warning("الرجاء إدخال الوزن الإجمالي وقيمة البيان الجمركي أولاً.")
+  elif not containers_data:
     st.warning("الرجاء إدخال تواريخ الحاويات أولاً.")
   else:
     num_containers_count = len(containers_data)
@@ -134,7 +146,7 @@ if st.button("🧮 حساب الرسوم", type="primary"):
         "تقرير حساب رسوم الحاويات والساحات",
         f"رقم المرجع (الحاوية/البوليصة): {ref_number}",
         f"إجمالي الوزن: {shared_weight} طن",
-        f"قيمة البيان الجمركي: {shared_declaration} دينار",
+        f"قيمة البيان الجمركي: {shared_declaration:,.2f} دينار",
         f"عدد الحاويات: {num_containers_count}",
         "-" * 30,
     ]
@@ -160,20 +172,22 @@ if st.button("🧮 حساب الرسوم", type="primary"):
       report_results.append({
           "الحاوية": f"رقم {index}",
           "أيام التخزين": f"{storage_days} يوم",
-          "رسوم التخزين (15 د)": f"{storage_fee:.2f} د",
-          "مناولة وحراسة": f"{handling_guard_fee:.2f} د",
-          "تأمين البيان (حصة)": f"{insurance_share_per_container:.2f} د",
-          "خدمات عامة (حصة)": f"{general_services_share_per_container:.2f} د",
-          "الإجمالي": f"{container_total:.2f} د",
+          "رسوم التخزين (15 د)": f"{storage_fee:,.2f} د",
+          "مناولة وحراسة": f"{handling_guard_fee:,.2f} د",
+          "تأمين البيان (حصة)": f"{insurance_share_per_container:,.2f} د",
+          "خدمات عامة (حصة)": f"{general_services_share_per_container:,.2f} د",
+          "الإجمالي": f"{container_total:,.2f} د",
       })
 
       email_body_lines.append(
-          f"الحاوية {index}: تخزين {storage_days} أيام ({storage_fee}د) |"
-          f" الإجمالي: {container_total:.2f} د"
+          f"الحاوية {index}: تخزين {storage_days} أيام ({storage_fee:,.2f}د) |"
+          f" الإجمالي: {container_total:,.2f} د"
       )
 
     email_body_lines.append("-" * 30)
-    email_body_lines.append(f"الإجمالي الكلي للرسوم: {grand_total:.2f} دينار")
+    email_body_lines.append(
+        f"الإجمالي الكلي للرسوم: {grand_total:,.2f} دينار"
+    )
     email_body_lines.append(
         "\nملاحظة: هذا البرنامج لغاية الاحتساب وليس رسمياً."
     )
@@ -184,14 +198,14 @@ if st.button("🧮 حساب الرسوم", type="primary"):
     st.success("تم إتمام الحسابات بنجاح!")
     st.info(
         f"📌 **رقم المرجع:** {ref_number} | **تأمين البيان الكلي:**"
-        f" {total_insurance:.2f} د | **خدمات عامة الكلية:**"
-        f" {total_general_services:.2f} د"
+        f" {total_insurance:,.2f} د | **خدمات عامة الكلية:**"
+        f" {total_general_services:,.2f} د"
     )
 
     result_df = pd.DataFrame(report_results)
     st.table(result_df)
     st.markdown(
-        f"### 💰 الإجمالي الكلي للرسوم: **{grand_total:.2f} دينار**"
+        f"### 💰 الإجمالي الكلي للرسوم: **{grand_total:,.2f} دينار**"
     )
 
     # حفظ التقرير في الذاكرة لتوفير زر الطباعة والإرسال اليدوي
@@ -199,7 +213,7 @@ if st.button("🧮 حساب الرسوم", type="primary"):
     st.session_state["ref_number"] = ref_number
     st.session_state["extra_email"] = recipient_email_input
 
-    # محاولة إرسال البريد تلقائياً (ستظهر ملاحظة الـ Secrets إذا لم تكن مفعلة، دون أن تعطل الحساب)
+    # محاولة إرسال البريد تلقائياً
     email_success, email_msg = send_email_reports(
         full_email_text, ref_number, recipient_email_input
     )
@@ -220,9 +234,7 @@ if "last_report" in st.session_state:
   with col_p1:
     st.download_button(
         label="📥 تحميل التقرير (.txt)",
-        data=st.session_state["last_report"].encode(
-            "utf-8-sig"
-        ),  # لضمان ظهور العربية بشكل صحيح
+        data=st.session_state["last_report"].encode("utf-8-sig"),
         file_name=f"Container_Fees_{st.session_state['ref_number']}.txt",
         mime="text/plain;charset=utf-8",
     )
@@ -256,4 +268,3 @@ st.markdown(
     "</div>",
     unsafe_allow_html=True,
 )
-
