@@ -1,8 +1,5 @@
 from datetime import datetime
-import email.mime.multipart
-import email.mime.text
-import smtplib
-import ssl
+import urllib.parse
 import pandas as pd
 import streamlit as st
 
@@ -54,7 +51,7 @@ st.markdown(
 
 st.markdown("---")
 
-# الخطوة الأولى: المعلومات الأساسية ورقم المرجع والبريد المستلم
+# الخطوة الأولى: المعلومات الأساسية ورقم المرجع
 st.markdown("### 📝 الخطوة 1: المعلومات الأساسية ورقم المرجع")
 col_r1, col_r2 = st.columns(2)
 with col_r1:
@@ -88,7 +85,7 @@ with col_r4:
 # خانة إدخال البريد الإلكتروني للإرسال
 recipient_email_input = st.text_input(
     "البريد الإلكتروني المراد الإرسال إليه (اختياري)",
-    value="",
+    value="Amerbasuoni@yahoo.com",
     placeholder="example@domain.com",
 )
 
@@ -129,39 +126,6 @@ for i in range(int(num_containers)):
   })
   st.markdown("---")
 
-
-def send_email_reports(report_text, ref_no, extra_email):
-  try:
-    sender_email = st.secrets["email"]["sender_email"]
-    sender_password = st.secrets["email"]["sender_password"]
-  except Exception:
-    return False, "إعدادات البريد غير متوفرة في Secrets."
-
-  receivers = ["Amerbasuoni@yahoo.com"]
-  if extra_email and "@" in extra_email:
-    receivers.append(extra_email.strip())
-
-  success_count = 0
-  try:
-    context = ssl.create_default_context()
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
-      server.login(sender_email, sender_password)
-      for receiver in receivers:
-        message = email.mime.multipart.MIMEMultipart("alternative")
-        message["Subject"] = f"كشف حساب رسوم حاويات - رقم المرجع: {ref_no}"
-        message["From"] = sender_email
-        message["To"] = receiver
-
-        part = email.mime.text.MIMEText(report_text, "plain", "utf-8")
-        message.attach(part)
-
-        server.sendmail(sender_email, receiver, message.as_string())
-        success_count += 1
-    return True, f"تم إرسال التقرير بنجاح إلى ({success_count} بريد إلكتروني)."
-  except Exception as e:
-    return False, f"فشل في إرسال البريد: {e}"
-
-
 if st.button("🧮 حساب الرسوم", type="primary"):
   if shared_weight is None or shared_declaration is None:
     st.warning("الرجاء إدخال الوزن الإجمالي وقيمة البيان الجمركي أولاً.")
@@ -179,13 +143,20 @@ if st.button("🧮 حساب الرسوم", type="primary"):
 
     grand_total = 0
     report_results = []
-    email_body_lines = [
-        "تقرير حساب رسوم الحاويات والساحات",
-        f"رقم المرجع (الحاوية/البوليصة): {ref_number}",
-        f"إجمالي الوزن: {shared_weight} طن",
-        f"قيمة البيان الجمركي: {shared_declaration:,.2f} دينار",
-        f"عدد الحاويات: {num_containers_count}",
-        "-" * 30,
+
+    # تصميم نص التقرير الاحترافي للتحميل والطباعة والإرسال
+    report_lines = [
+        "==================================================",
+        "           كشف حساب رسوم الحاويات والساحات          ",
+        "==================================================",
+        f"📅 تاريخ الإصدار: {datetime.today().strftime('%Y-%m-%d')}",
+        f"📌 رقم المرجع (الحاوية/البوليصة): {ref_number}",
+        f"⚖️ إجمالي الوزن: {shared_weight} طن",
+        f"📋 قيمة البيان الجمركي: {shared_declaration:,.2f} دينار",
+        f"🔢 عدد الحاويات: {num_containers_count}",
+        "--------------------------------------------------",
+        "              تفاصيل حساب الرسوم للحاويات            ",
+        "--------------------------------------------------",
     ]
 
     for index, container in enumerate(containers_data, start=1):
@@ -216,21 +187,26 @@ if st.button("🧮 حساب الرسوم", type="primary"):
           "الإجمالي": f"{container_total:,.2f} د",
       })
 
-      email_body_lines.append(
-          f"الحاوية {index}: تخزين {storage_days} أيام ({storage_fee:,.2f}د) |"
-          f" الإجمالي: {container_total:,.2f} د"
-      )
+      report_lines.extend([
+          f"🔹 الحاوية رقم ({index}):",
+          f"   • فترة التخزين: {storage_days} أيام (رسوم التخزين: {storage_fee:,.2f} د)",
+          f"   • بدل مناولة وحراسة: {handling_guard_fee:,.2f} د",
+          f"   • حصة تأمين البيان: {insurance_share_per_container:,.2f} د",
+          f"   • حصة الخدمات العامة: {general_services_share_per_container:,.2f} د",
+          f"   ➔ إجمالي الحاوية ({index}): {container_total:,.2f} دينار",
+          "--------------------------------------------------",
+      ])
 
-    email_body_lines.append("-" * 30)
-    email_body_lines.append(
-        f"الإجمالي الكلي للرسوم: {grand_total:,.2f} دينار"
-    )
-    email_body_lines.append(
-        "\nملاحظة: هذا البرنامج لغاية الاحتساب وليس رسمياً."
-    )
-    email_body_lines.append("إعداد: السيد علي بسيوني")
+    report_lines.extend([
+        "==================================================",
+        f"💰 الإجمالي الكلي للرسوم: {grand_total:,.2f} دينار",
+        "==================================================",
+        "⚠️ ملاحظة: هذا التقرير لغاية الاحتساب وليس وثيقة رسمية نهائية.",
+        "🛠️ إعداد وتطوير: السيد علي بسيوني",
+        "==================================================",
+    ])
 
-    full_email_text = "\n".join(email_body_lines)
+    full_report_text = "\n".join(report_lines)
 
     st.success("تم إتمام الحسابات بنجاح!")
     st.info(
@@ -252,9 +228,13 @@ if st.button("🧮 حساب الرسوم", type="primary"):
         unsafe_allow_html=True,
     )
 
-    st.session_state["last_report"] = full_email_text
+    st.session_state["last_report"] = full_report_text
     st.session_state["ref_number"] = ref_number
-    st.session_state["extra_email"] = recipient_email_input
+    st.session_state["extra_email"] = (
+        recipient_email_input
+        if recipient_email_input
+        else "Amerbasuoni@yahoo.com"
+    )
 
 if "last_report" in st.session_state:
   st.markdown("---")
@@ -262,6 +242,13 @@ if "last_report" in st.session_state:
       "<h3 style='color: #1e3a8a;'>🖨️ 📧 خيارات التحميل، الإرسال، والطباعة</h3>",
       unsafe_allow_html=True,
   )
+
+  # تجهيز رابط الـ mailto الآمن لفتح تطبيق الإيميل مباشرة مع البيانات
+  encoded_subject = urllib.parse.quote(
+      f"كشف حساب رسوم حاويات - رقم المرجع: {st.session_state['ref_number']}"
+  )
+  encoded_body = urllib.parse.quote(st.session_state["last_report"])
+  mailto_link = f"mailto:{st.session_state['extra_email']}?subject={encoded_subject}&body={encoded_body}"
 
   col_p1, col_p2, col_p3 = st.columns(3)
   with col_p1:
@@ -272,16 +259,16 @@ if "last_report" in st.session_state:
         mime="text/plain;charset=utf-8",
     )
   with col_p2:
-    if st.button("📤 إرسال عبر البريد"):
-      s_succ, s_msg = send_email_reports(
-          st.session_state["last_report"],
-          st.session_state["ref_number"],
-          st.session_state["extra_email"],
-      )
-      if s_succ:
-        st.success(s_msg)
-      else:
-        st.error(s_msg)
+    st.markdown(
+        f"""
+        <a href="{mailto_link}" target="_blank" style="text-decoration: none;">
+            <div style="width: 100%; background-color: #2563eb; color: white; padding: 11px 10px; border-radius: 6px; font-weight: bold; text-align: center; font-family: Tahoma; font-size: 15px;">
+                📤 إرسال عبر البريد
+            </div>
+        </a>
+        """,
+        unsafe_allow_html=True,
+    )
   with col_p3:
     st.markdown(
         """
